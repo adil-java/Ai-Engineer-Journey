@@ -1,1 +1,1 @@
-# Phase 6: GitHub App webhook server
+# WhoFix web app (Django): approval inbox now; GitHub App webhook in Phase 6.

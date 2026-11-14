@@ -55,6 +55,7 @@ It must beat simple non-AI baselines (for example, "the last person who edited t
 | AI | Gemini API, Pydantic structured outputs, embeddings, hybrid search (BM25 + vectors) |
 | Agents | MCP server and tool calling, human-in-the-loop approval |
 | Quality | Golden datasets, LLM-as-judge, Langfuse tracing, eval gate in CI |
+| Web app | Django (admin as approval inbox, audit log) |
 | Delivery | GitHub App (webhooks), GitHub Actions, Docker |
 
 ## Getting started
@@ -72,10 +73,19 @@ Fill in `.env`:
 - `GITHUB_TOKEN`: a fine-grained token with **read-only access to public repositories** and nothing else
 - `GEMINI_API_KEY`: from Google AI Studio
 
-Run each step **from the project root** as a module:
+Run each step **from the project root**:
 
 ```powershell
-python -m ingest.github_issues
+python -m ingest.github_issues          # GitHub → data/raw/github/issues/<date>.json
+python -m llm.classify                  # classify 5 issues → data/clean/classifications.jsonl
+
+python manage.py migrate                # web app (first time only)
+python manage.py createsuperuser        # first time only
+python manage.py import_classifications # classifications → pending proposals
+python manage.py runserver              # approval inbox: http://127.0.0.1:8000/admin/
+
+python -m pytest                        # pipeline tests
+python manage.py test app.proposals     # web app tests
 ```
 
 ## Project layout
@@ -88,7 +98,7 @@ python -m ingest.github_issues
 | `rag/` | Embeddings and search |
 | `agent/` | Agent loop and WhoFix MCP server |
 | `evals/` | Test datasets and accuracy measurement |
-| `app/` | GitHub App webhook server |
+| `app/` | Django web app: approval inbox now, GitHub App webhook later |
 | `tests/` | Unit tests |
 | `data/` | Local data (never committed) |
 

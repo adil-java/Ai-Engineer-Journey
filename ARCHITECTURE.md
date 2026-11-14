@@ -78,7 +78,7 @@ flowchart TB
 | `rag/`       | Indexer + hybrid search            | issue → ranked developers + evidence PRs         | Phase 3    |
 | `agent/`     | Agent loop + `whofix` MCP server | question / issue → proposal or answer            | Phase 4    |
 | `evals/`     | Golden sets, baselines, judge      | predictions + ground truth → scores              | Phase 5    |
-| `app/`       | GitHub App webhook server          | webhook → job → proposal → approved write      | Phase 6    |
+| `app/`       | **Django**: approval inbox (admin) + audit log; webhook later | proposals → human decision → approved write | skeleton now, webhook Phase 6 |
 | `tests/`     | Unit tests                         | n/a                                               | always     |
 
 **Dependency rule:** arrows only point *down* this list's layers: `app → agent → rag/llm → warehouse ← transform ← ingest`.
@@ -165,6 +165,11 @@ sequenceDiagram
 | Ground truth = who **merged/authored the fixing PR**, not the assignee field | OSS repos rarely set assignees                                                          | n/a                                        |
 | Suggest only; a human approves                                                     | Trust, safety, and the project rule                                                     | Never in v1                                |
 | Must beat 3 non-AI baselines                                                       | Honest proof the AI adds value                                                          | n/a                                        |
+| **Django** for the web app; Django admin is the approval inbox | Approval UI, auth, audit log and migrations without a separate frontend; Python end to end | Users need a richer UI (then HTMX or Next.js on top) |
+| App DB (SQLite → Postgres) is separate from the warehouse (DuckDB) | App state is transactional (row locks on decisions); analytics is read-heavy and rebuildable | Phase 3 moves both onto Postgres + pgvector |
+| Every decision goes through `proposals/services.decide()` | One code path, so the audit log can't be skipped; a row lock stops double decisions | n/a |
+| Classifier `gemini-3.5-flash-lite`, thinking = minimal | `2.5-flash-lite` is retired for new users; thinking tokens bill as output | Classifier accuracy < 85% on the golden set |
+| **Gemini free tier only** (no billing account linked), calls paced 6s apart | $0 budget; over quota means 429, never a bill; cache + re-run resumes where it stopped. Free-tier prompts may train Google models → public repos only | Never for this project; paid tier only for private repos |
 
 **Open decision (decide by Phase 6):** is a *suggestion comment* on the issue itself allowed before approval,
 or does every GitHub write wait for approval? The diagram above uses the strict option (nothing written until approved).
@@ -198,9 +203,13 @@ flowchart LR
     llm --> cost["print tokens + cost"]
 ```
 
-| Step | Module                        | Task                                           |
-| ---- | ----------------------------- | ---------------------------------------------- |
-| 1.1  | `ingest/github_issues.py`   | Fetch + land raw issues (idempotent, dated)    |
-| 1.2  | `ingest/` or `transform/` | Separate issues from PRs                       |
-| 1.3  | `llm/schemas.py`            | `IssueClassification` Pydantic model         |
-| 1.4  | `llm/classify.py`           | Classify 5 issues, validate, cache, print cost |
+| Step | Module                        | Task                                           | Status |
+| ---- | ----------------------------- | ---------------------------------------------- | ------ |
+| 1.1  | `ingest/github_issues.py`   | Fetch + land raw issues (idempotent, atomic, UTC date) | done |
+| 1.2  | `transform/issues.py`       | Separate issues from PRs                       | done |
+| 1.3  | `llm/schemas.py`            | `IssueClassification` Pydantic model         | done |
+| 1.4  | `llm/classify.py`           | Classify 5 issues, validate, cache, print cost | done |
+| 1.5  | `app/proposals/`            | Import classifications as pending proposals; approve/reject in admin | done (skeleton) |
+
+First run (2026-11-14): 300 items = 26 issues + 274 PRs (mostly bot dependency PRs).
+5 issues classified, 0 invalid, 5,737 + 447 tokens, about $0.0028. Second run: 5 cached, $0.
