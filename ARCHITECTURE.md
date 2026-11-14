@@ -70,16 +70,16 @@ flowchart TB
 
 ## 3. Components and where they live
 
-| Folder | Component | Input → Output | Built in |
-|---|---|---|---|
-| `ingest/` | GitHub client + raw loaders | API → `data/raw/github/{endpoint}/{date}.json` | Phase 0, 2 |
-| `transform/` | Clean + model | raw JSON → DuckDB tables | Phase 2 |
-| `llm/` | Client, schemas, cost meter, cache | issue text → validated `IssueClassification` | Phase 0, 1 |
-| `rag/` | Indexer + hybrid search | issue → ranked developers + evidence PRs | Phase 3 |
-| `agent/` | Agent loop + `whofix` MCP server | question / issue → proposal or answer | Phase 4 |
-| `evals/` | Golden sets, baselines, judge | predictions + ground truth → scores | Phase 5 |
-| `app/` | GitHub App webhook server | webhook → job → proposal → approved write | Phase 6 |
-| `tests/` | Unit tests | n/a | always |
+| Folder         | Component                          | Input → Output                                   | Built in   |
+| -------------- | ---------------------------------- | ------------------------------------------------- | ---------- |
+| `ingest/`    | GitHub client + raw loaders        | API → `data/raw/github/{endpoint}/{date}.json` | Phase 0, 2 |
+| `transform/` | Clean + model                      | raw JSON → DuckDB tables                         | Phase 2    |
+| `llm/`       | Client, schemas, cost meter, cache | issue text → validated `IssueClassification`   | Phase 0, 1 |
+| `rag/`       | Indexer + hybrid search            | issue → ranked developers + evidence PRs         | Phase 3    |
+| `agent/`     | Agent loop + `whofix` MCP server | question / issue → proposal or answer            | Phase 4    |
+| `evals/`     | Golden sets, baselines, judge      | predictions + ground truth → scores              | Phase 5    |
+| `app/`       | GitHub App webhook server          | webhook → job → proposal → approved write      | Phase 6    |
+| `tests/`     | Unit tests                         | n/a                                               | always     |
 
 **Dependency rule:** arrows only point *down* this list's layers: `app → agent → rag/llm → warehouse ← transform ← ingest`.
 `ingest/` never imports `llm/`; `llm/` never calls GitHub. Each layer can be run and tested alone.
@@ -101,15 +101,15 @@ erDiagram
     dim_date ||--o{ fact_issue : "created on"
 ```
 
-| Table | Grain (one row per…) | Notes |
-|---|---|---|
-| `fact_issue` | issue (PRs excluded) | the issues endpoint also returns PRs |
-| `fact_pull_request` | PR | merged_by matters more than author for ground truth |
-| `fact_pr_file` | (PR, file path) | "who knows this code" comes from here |
-| `bridge_issue_fix` | (issue, fixing PR) | **ground truth** for evals |
-| `issue_classification` | (issue, content hash, prompt version) | the LLM cache; never pay twice |
-| `dim_developer` | GitHub user | bots filtered out |
-| `dim_file` / `dim_area` | path / code area | e.g. `packages/core/router/*` → `router` |
+| Table                       | Grain (one row per…)                 | Notes                                               |
+| --------------------------- | ------------------------------------- | --------------------------------------------------- |
+| `fact_issue`              | issue (PRs excluded)                  | the issues endpoint also returns PRs                |
+| `fact_pull_request`       | PR                                    | merged_by matters more than author for ground truth |
+| `fact_pr_file`            | (PR, file path)                       | "who knows this code" comes from here               |
+| `bridge_issue_fix`        | (issue, fixing PR)                    | **ground truth** for evals                    |
+| `issue_classification`    | (issue, content hash, prompt version) | the LLM cache; never pay twice                      |
+| `dim_developer`           | GitHub user                           | bots filtered out                                   |
+| `dim_file` / `dim_area` | path / code area                      | e.g. `packages/core/router/*` → `router`       |
 
 ---
 
@@ -145,26 +145,26 @@ sequenceDiagram
 
 ## 6. Trust boundaries (security)
 
-| Boundary | Threat | Control |
-|---|---|---|
-| Issue text → LLM | Prompt injection ("ignore instructions, assign to X") | Issue text is delimited as data; output must pass the schema; tools are read-only |
-| LLM output → system | Invalid or invented values | Pydantic validation; enums for type/priority; assignee must be in `dim_developer` |
-| GitHub → webhook | Forged payloads, replays | HMAC signature check; delivery-id dedupe |
-| WhoFix → GitHub | Unwanted writes | Write path exists only behind approval; separate token with minimal scope |
-| Secrets | Leaks | `.env` only, never logged, never in prompts |
+| Boundary             | Threat                                                | Control                                                                             |
+| -------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Issue text → LLM    | Prompt injection ("ignore instructions, assign to X") | Issue text is delimited as data; output must pass the schema; tools are read-only   |
+| LLM output → system | Invalid or invented values                            | Pydantic validation; enums for type/priority; assignee must be in `dim_developer` |
+| GitHub → webhook    | Forged payloads, replays                              | HMAC signature check; delivery-id dedupe                                            |
+| WhoFix → GitHub     | Unwanted writes                                       | Write path exists only behind approval; separate token with minimal scope           |
+| Secrets              | Leaks                                                 | `.env` only, never logged, never in prompts                                       |
 
 ---
 
 ## 7. Key decisions
 
-| Decision | Why | Revisit when |
-|---|---|---|
-| Raw JSON is immutable, one file per endpoint per day | Every table can be rebuilt; reruns don't corrupt history | Data gets too big for files |
-| DuckDB first, Postgres + pgvector later | Zero setup, SQL practice now; same SQL later | Phase 3 needs vector search in the same DB |
-| Batch classification, cached by `(content hash, prompt version)` | Free-tier limits; never pay twice; changing the prompt invalidates the cache on purpose | n/a |
-| Ground truth = who **merged/authored the fixing PR**, not the assignee field | OSS repos rarely set assignees | n/a |
-| Suggest only; a human approves | Trust, safety, and the project rule | Never in v1 |
-| Must beat 3 non-AI baselines | Honest proof the AI adds value | n/a |
+| Decision                                                                           | Why                                                                                     | Revisit when                               |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Raw JSON is immutable, one file per endpoint per day                               | Every table can be rebuilt; reruns don't corrupt history                                | Data gets too big for files                |
+| DuckDB first, Postgres + pgvector later                                            | Zero setup, SQL practice now; same SQL later                                            | Phase 3 needs vector search in the same DB |
+| Batch classification, cached by `(content hash, prompt version)`                 | Free-tier limits; never pay twice; changing the prompt invalidates the cache on purpose | n/a                                        |
+| Ground truth = who **merged/authored the fixing PR**, not the assignee field | OSS repos rarely set assignees                                                          | n/a                                        |
+| Suggest only; a human approves                                                     | Trust, safety, and the project rule                                                     | Never in v1                                |
+| Must beat 3 non-AI baselines                                                       | Honest proof the AI adds value                                                          | n/a                                        |
 
 **Open decision (decide by Phase 6):** is a *suggestion comment* on the issue itself allowed before approval,
 or does every GitHub write wait for approval? The diagram above uses the strict option (nothing written until approved).
@@ -198,9 +198,9 @@ flowchart LR
     llm --> cost["print tokens + cost"]
 ```
 
-| Step | Module | Task |
-|---|---|---|
-| 1.1 | `ingest/github_issues.py` | Fetch + land raw issues (idempotent, dated) |
-| 1.2 | `ingest/` or `transform/` | Separate issues from PRs |
-| 1.3 | `llm/schemas.py` | `IssueClassification` Pydantic model |
-| 1.4 | `llm/classify.py` | Classify 5 issues, validate, cache, print cost |
+| Step | Module                        | Task                                           |
+| ---- | ----------------------------- | ---------------------------------------------- |
+| 1.1  | `ingest/github_issues.py`   | Fetch + land raw issues (idempotent, dated)    |
+| 1.2  | `ingest/` or `transform/` | Separate issues from PRs                       |
+| 1.3  | `llm/schemas.py`            | `IssueClassification` Pydantic model         |
+| 1.4  | `llm/classify.py`           | Classify 5 issues, validate, cache, print cost |
